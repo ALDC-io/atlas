@@ -33,16 +33,18 @@ export function AthenaPane({ graphUrl, graphName }: AthenaPaneProps) {
 
     // Listen for postMessage from iframe
     useEffect(() => {
+        console.log('[AthenaPane] Setting up message listener');
+
         const handleMessage = (event: MessageEvent) => {
-            // Debug logging
+            // Debug logging - log ALL messages
             console.log('[AthenaPane] Received message:', event.origin, event.data);
 
-            // Accept messages from athena domains
-            const isAthenaOrigin = event.origin.includes('athena.aldc.io') ||
-                                   event.origin.includes('athena.happydesert') ||
-                                   event.origin.includes('azurecontainerapps.io');
+            // Accept messages from athena domains or any azurecontainerapps
+            const isValidOrigin = event.origin.includes('athena') ||
+                                   event.origin.includes('azurecontainerapps.io') ||
+                                   event.origin.includes('aldc.io');
 
-            if (!isAthenaOrigin) {
+            if (!isValidOrigin) {
                 console.log('[AthenaPane] Ignoring message from:', event.origin);
                 return;
             }
@@ -57,7 +59,12 @@ export function AthenaPane({ graphUrl, graphName }: AthenaPaneProps) {
         };
 
         window.addEventListener('message', handleMessage);
-        return () => window.removeEventListener('message', handleMessage);
+        console.log('[AthenaPane] Message listener attached');
+
+        return () => {
+            console.log('[AthenaPane] Removing message listener');
+            window.removeEventListener('message', handleMessage);
+        };
     }, []);
 
     // Embed URL hides sidebar
