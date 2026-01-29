@@ -65,6 +65,9 @@ interface AtlasStore {
     setNextcloudLoading: (loading: boolean) => void;
     loadNextcloudFolder: (path: string) => Promise<void>;
     loadNextcloudFile: (path: string) => Promise<void>;
+    saveNextcloudFile: (path: string, content: string) => Promise<boolean>;
+    createNextcloudFile: (parentPath: string, filename: string, content: string) => Promise<string | null>;
+    refreshNextcloudFolder: (path: string) => Promise<void>;
 
     // Document Actions
     setEditMode: (mode: boolean) => void;
@@ -340,6 +343,75 @@ export const useAtlasStore = create<AtlasStore>((set, get) => ({
         } finally {
             set({ nextcloudLoading: false });
         }
+    },
+
+    saveNextcloudFile: async (path, content) => {
+        set({ nextcloudLoading: true });
+        try {
+            const response = await fetch("/api/nextcloud/save", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path, content }),
+            });
+
+            if (response.ok) {
+                set({ nextcloudContent: content, draftContent: content });
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error("Failed to save Nextcloud file:", error);
+            return false;
+        } finally {
+            set({ nextcloudLoading: false });
+        }
+    },
+
+    createNextcloudFile: async (parentPath, filename, content) => {
+        const state = get();
+        set({ nextcloudLoading: true });
+        try {
+            // Ensure path ends properly
+            const normalizedParent = parentPath.endsWith("/") ? parentPath.slice(0, -1) : parentPath;
+            const filePath = `${normalizedParent}/${filename}`;
+
+            const response = await fetch("/api/nextcloud/save", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path: filePath, content }),
+            });
+
+            if (response.ok) {
+                // Refresh the parent folder to show new file
+                await get().refreshNextcloudFolder(normalizedParent);
+                return filePath;
+            }
+            return null;
+        } catch (error) {
+            console.error("Failed to create Nextcloud file:", error);
+            return null;
+        } finally {
+            set({ nextcloudLoading: false });
+        }
+    },
+
+    refreshNextcloudFolder: async (path) => {
+        const state = get();
+        const normalizePath = (p: string) => p.endsWith("/") ? p.slice(0, -1) : p;
+        const normalizedPath = normalizePath(path);
+
+        // Mark folder as not loaded so it will refresh
+        const nextcloudItems = { ...state.nextcloudItems };
+        if (nextcloudItems[normalizedPath]) {
+            nextcloudItems[normalizedPath] = {
+                ...nextcloudItems[normalizedPath],
+                isLoaded: false,
+            };
+            set({ nextcloudItems });
+        }
+
+        // Reload the folder
+        await get().loadNextcloudFolder(normalizedPath);
     },
 
     // Utility

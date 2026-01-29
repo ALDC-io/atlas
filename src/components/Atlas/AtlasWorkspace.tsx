@@ -21,10 +21,11 @@ type LeftPaneView = "documents" | "knowledge-graph";
 
 // Available knowledge graphs
 const KNOWLEDGE_GRAPHS = [
-    { id: "zeus", label: "Zeus Memory", url: "https://athena.aldc.io", description: "Organizational decisions & learnings" },
-    { id: "gep", label: "GEP", url: "https://athena.aldc.io?tenant=gep", description: "GEP client knowledge" },
-    { id: "fusion92", label: "Fusion92", url: "https://athena.aldc.io?tenant=fusion92", description: "Fusion92 client knowledge" },
-    { id: "aldc", label: "ALDC Internal", url: "https://athena.aldc.io?tenant=aldc", description: "ALDC internal operations" },
+    { id: "zeus", label: "Zeus Memory", url: "https://athena.aldc.io/viz/zeus", description: "Organizational decisions & learnings" },
+    { id: "fbc", label: "Food Banks Canada", url: "https://athena.aldc.io/viz/fbc", description: "Food Banks Canada knowledge" },
+    { id: "gep", label: "GEP", url: "https://athena.aldc.io/viz/gep", description: "GEP client knowledge" },
+    { id: "fusion92", label: "Fusion92", url: "https://athena.aldc.io/viz/f92", description: "Fusion92 client knowledge" },
+    { id: "aldc", label: "ALDC Internal", url: "https://athena.aldc.io/viz/aldc", description: "ALDC internal operations" },
 ];
 
 const ZEUS_API_KEY = process.env.NEXT_PUBLIC_ZEUS_API_KEY || "";
