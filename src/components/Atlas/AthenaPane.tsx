@@ -2,7 +2,7 @@
 
 import { Box, Text, Loader, Button, Group, Paper, Badge, ScrollArea } from "@mantine/core";
 import { IconExternalLink, IconNetwork, IconInfoCircle } from "@tabler/icons-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface NodeData {
     id: string;
@@ -25,47 +25,62 @@ export function AthenaPane({ graphUrl, graphName }: AthenaPaneProps) {
     const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
+    // Use ref to track mount state for Strict Mode compatibility
+    const mountedRef = useRef(true);
+    const listenerRef = useRef<((event: MessageEvent) => void) | null>(null);
+
     // Reset loading state when graph changes
     useEffect(() => {
         setIsLoading(true);
         setSelectedNode(null);
     }, [graphUrl]);
 
+    // Stable message handler using useCallback
+    const handleMessage = useCallback((event: MessageEvent) => {
+        // Accept messages from athena domains or any azurecontainerapps
+        const isValidOrigin = event.origin.includes('athena') ||
+                               event.origin.includes('azurecontainerapps.io') ||
+                               event.origin.includes('aldc.io');
+
+        if (!isValidOrigin) {
+            return;
+        }
+
+        console.log('[AthenaPane] Received message:', event.data?.type, event.data?.node?.name);
+
+        if (event.data?.type === 'nodeSelected') {
+            console.log('[AthenaPane] Node selected:', event.data.node?.name);
+            setSelectedNode(event.data.node);
+        } else if (event.data?.type === 'nodeDeselected') {
+            console.log('[AthenaPane] Node deselected');
+            setSelectedNode(null);
+        }
+    }, []);
+
     // Listen for postMessage from iframe
     useEffect(() => {
+        mountedRef.current = true;
         console.log('[AthenaPane] Setting up message listener');
 
-        const handleMessage = (event: MessageEvent) => {
-            // Debug logging - log ALL messages
-            console.log('[AthenaPane] Received message:', event.origin, event.data);
+        // Remove any existing listener first
+        if (listenerRef.current) {
+            window.removeEventListener('message', listenerRef.current);
+        }
 
-            // Accept messages from athena domains or any azurecontainerapps
-            const isValidOrigin = event.origin.includes('athena') ||
-                                   event.origin.includes('azurecontainerapps.io') ||
-                                   event.origin.includes('aldc.io');
-
-            if (!isValidOrigin) {
-                console.log('[AthenaPane] Ignoring message from:', event.origin);
-                return;
-            }
-
-            if (event.data?.type === 'nodeSelected') {
-                console.log('[AthenaPane] Node selected:', event.data.node);
-                setSelectedNode(event.data.node);
-            } else if (event.data?.type === 'nodeDeselected') {
-                console.log('[AthenaPane] Node deselected');
-                setSelectedNode(null);
-            }
-        };
-
+        // Store the handler reference
+        listenerRef.current = handleMessage;
         window.addEventListener('message', handleMessage);
         console.log('[AthenaPane] Message listener attached');
 
         return () => {
-            console.log('[AthenaPane] Removing message listener');
-            window.removeEventListener('message', handleMessage);
+            console.log('[AthenaPane] Cleanup - removing message listener');
+            mountedRef.current = false;
+            if (listenerRef.current) {
+                window.removeEventListener('message', listenerRef.current);
+                listenerRef.current = null;
+            }
         };
-    }, []);
+    }, [handleMessage]);
 
     // Embed URL hides sidebar
     const embedUrl = `${graphUrl}${graphUrl.includes('?') ? '&' : '?'}embed=true`;
