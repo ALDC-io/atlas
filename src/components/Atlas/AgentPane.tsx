@@ -289,22 +289,22 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                 p="xs"
                 className={`max-w-[85%] ${
                     isUser
-                        ? "bg-blue-500 text-white"
+                        ? "bg-blue-500"
                         : "bg-gray-100 dark:bg-gray-800"
                 }`}
                 radius="md"
             >
                 <Group gap="xs" mb={4}>
                     {isUser ? (
-                        <IconUser size={12} />
+                        <IconUser size={12} className="text-white" />
                     ) : (
                         <IconBolt size={12} className="text-yellow-500" />
                     )}
-                    <Text size="xs" fw={500}>
+                    <Text size="xs" fw={500} c={isUser ? "white" : "dark"}>
                         {isUser ? "You" : "Zeus"}
                     </Text>
                 </Group>
-                <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
+                <Text size="sm" c={isUser ? "white" : "dark"} style={{ whiteSpace: "pre-wrap" }}>
                     {message.content}
                 </Text>
             </Paper>
