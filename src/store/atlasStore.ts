@@ -242,12 +242,16 @@ export const useAtlasStore = create<AtlasStore>((set, get) => ({
         const state = get();
         const nextcloudItems = { ...state.nextcloudItems };
 
+        // Helper to normalize paths (remove trailing slashes)
+        const normalizePath = (p: string) => p.endsWith("/") ? p.slice(0, -1) : p;
+
         // Convert items to tree format
         for (const item of items) {
+            const normalizedPath = normalizePath(item.path);
             const treeItem: NextcloudTreeItem = {
-                id: item.path,
+                id: normalizedPath,
                 name: item.name,
-                path: item.path,
+                path: normalizedPath,
                 type: item.type,
                 size: item.size,
                 lastModified: item.lastModified,
@@ -256,14 +260,15 @@ export const useAtlasStore = create<AtlasStore>((set, get) => ({
                 isLoaded: false,
                 isNextcloud: true,
             };
-            nextcloudItems[item.path] = treeItem;
+            nextcloudItems[normalizedPath] = treeItem;
         }
 
         // Update parent's children if parentPath provided
-        if (parentPath && nextcloudItems[parentPath]) {
-            nextcloudItems[parentPath] = {
-                ...nextcloudItems[parentPath],
-                children: items.map(i => i.path),
+        const normalizedParent = parentPath ? normalizePath(parentPath) : null;
+        if (normalizedParent && nextcloudItems[normalizedParent]) {
+            nextcloudItems[normalizedParent] = {
+                ...nextcloudItems[normalizedParent],
+                children: items.map(i => normalizePath(i.path)),
                 isLoaded: true,
             };
         }
@@ -271,7 +276,7 @@ export const useAtlasStore = create<AtlasStore>((set, get) => ({
         // If no parent, these are root items
         const nextcloudRootIds = parentPath
             ? state.nextcloudRootIds
-            : items.map(i => i.path);
+            : items.map(i => normalizePath(i.path));
 
         set({ nextcloudItems, nextcloudRootIds });
     },

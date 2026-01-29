@@ -155,7 +155,6 @@ function NextcloudNode({ item, level }: NextcloudNodeProps) {
     const isSelected = selectedNextcloudPath === item.path;
     const isExpanded = expandedIds.has(item.path);
     const isDirectory = item.type === "directory";
-    const hasChildren = item.children.length > 0 || (isDirectory && !item.isLoaded);
 
     // Get child items
     const childItems = item.children
@@ -167,21 +166,17 @@ function NextcloudNode({ item, level }: NextcloudNodeProps) {
             return a.name.localeCompare(b.name);
         });
 
-    const handleToggle = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (isDirectory) {
-            toggleExpanded(item.path);
-            if (!item.isLoaded) {
-                await loadNextcloudFolder(item.path);
-            }
-        }
-    };
-
-    const handleSelect = async () => {
+    const handleClick = async () => {
         selectNode(null); // Deselect any Zeus node
         selectNextcloudItem(item.path);
 
-        if (item.type === "file") {
+        if (isDirectory) {
+            // Load folder contents first if needed, then toggle expand
+            if (!item.isLoaded) {
+                await loadNextcloudFolder(item.path);
+            }
+            toggleExpanded(item.path);
+        } else {
             // Check if it's a text file we can display
             const textExtensions = [".md", ".txt", ".json", ".yaml", ".yml", ".xml", ".html", ".css", ".js", ".ts"];
             const ext = item.name.toLowerCase().substring(item.name.lastIndexOf("."));
@@ -194,48 +189,39 @@ function NextcloudNode({ item, level }: NextcloudNodeProps) {
     // Determine icon based on file type
     const getIcon = () => {
         if (isDirectory) {
-            return <IconFolder size={16} className="text-yellow-600" />;
+            return <IconFolder size={16} className="text-yellow-600 flex-shrink-0" />;
         }
         const ext = item.name.toLowerCase().substring(item.name.lastIndexOf("."));
         if (ext === ".md") {
-            return <IconFileText size={16} className="text-blue-500" />;
+            return <IconFileText size={16} className="text-blue-500 flex-shrink-0" />;
         }
-        return <IconFile size={16} className="text-gray-500" />;
+        return <IconFile size={16} className="text-gray-500 flex-shrink-0" />;
     };
 
     return (
         <Box>
-            <Group
-                gap={0}
+            <UnstyledButton
+                onClick={handleClick}
                 className={`
-                    py-1 px-2 rounded cursor-pointer transition-colors
+                    w-full flex items-center gap-1 py-1 px-2 rounded cursor-pointer transition-colors
                     ${isSelected ? "bg-blue-100 dark:bg-blue-900" : "hover:bg-gray-100 dark:hover:bg-gray-800"}
                 `}
-                style={{ paddingLeft: level * 16 }}
+                style={{ paddingLeft: level * 16 + 8 }}
             >
-                <ActionIcon
-                    variant="subtle"
-                    size="sm"
-                    onClick={handleToggle}
-                    className={isDirectory ? "" : "invisible"}
-                >
-                    {isExpanded ? (
-                        <IconChevronDown size={14} />
+                {isDirectory ? (
+                    isExpanded ? (
+                        <IconChevronDown size={14} className="flex-shrink-0 text-gray-500" />
                     ) : (
-                        <IconChevronRight size={14} />
-                    )}
-                </ActionIcon>
-
-                <UnstyledButton
-                    onClick={handleSelect}
-                    className="flex-1 flex items-center gap-2"
-                >
-                    {getIcon()}
-                    <Text size="sm" truncate className="flex-1">
-                        {item.name}
-                    </Text>
-                </UnstyledButton>
-            </Group>
+                        <IconChevronRight size={14} className="flex-shrink-0 text-gray-500" />
+                    )
+                ) : (
+                    <span style={{ width: 14 }} />
+                )}
+                {getIcon()}
+                <Text size="sm" truncate className="flex-1">
+                    {item.name}
+                </Text>
+            </UnstyledButton>
 
             <Collapse in={isExpanded}>
                 {childItems.map((child) => (
@@ -266,23 +252,22 @@ export function TreePane({ onCreateNode }: TreePaneProps) {
     const [localSearch, setLocalSearch] = useState("");
     const [isDragging, setIsDragging] = useState(false);
 
-    // Load Nextcloud root on mount
+    // Load Nextcloud folders on mount - restricted to specific path
     useEffect(() => {
         const loadNextcloudRoot = async () => {
             if (nextcloudRootIds.length > 0) return; // Already loaded
 
             try {
+                // Load from ALDC Management/CCE_projects specifically
                 const response = await fetch("/api/nextcloud/list", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ path: "/" }),
+                    body: JSON.stringify({ path: "/ALDC Management/CCE_projects" }),
                 });
 
                 if (response.ok) {
                     const files = await response.json();
-                    // Filter to only show directories at root level for cleaner UI
-                    const directories = files.filter((f: { type: string }) => f.type === "directory");
-                    setNextcloudItems(directories);
+                    setNextcloudItems(files);
                 }
             } catch (error) {
                 console.error("Failed to load Nextcloud root:", error);
@@ -322,7 +307,7 @@ export function TreePane({ onCreateNode }: TreePaneProps) {
             if (file.name.endsWith(".md") || file.name.endsWith(".txt") || file.type.startsWith("text/")) {
                 const content = await file.text();
                 const fileName = file.name;
-                const path = `/${fileName}`;
+                const path = `/ALDC Management/CCE_projects/${fileName}`;
 
                 try {
                     // Upload to Nextcloud
@@ -333,17 +318,16 @@ export function TreePane({ onCreateNode }: TreePaneProps) {
                     });
 
                     if (response.ok) {
-                        // Refresh the root listing
+                        // Refresh the listing
                         const listResponse = await fetch("/api/nextcloud/list", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ path: "/" }),
+                            body: JSON.stringify({ path: "/ALDC Management/CCE_projects" }),
                         });
 
                         if (listResponse.ok) {
                             const newFiles = await listResponse.json();
-                            const directories = newFiles.filter((f: { type: string }) => f.type === "directory");
-                            setNextcloudItems(directories);
+                            setNextcloudItems(newFiles);
                         }
                     }
                 } catch (error) {
@@ -422,12 +406,19 @@ export function TreePane({ onCreateNode }: TreePaneProps) {
                         </Text>
                     )
                 ) : (
-                    // Regular Tree - Nextcloud folders first, then Zeus nodes
+                    // Regular Tree - Projects (Nextcloud) first, then Zeus nodes
                     <Box>
-                        {/* Nextcloud Folders */}
-                        {rootNextcloudItems.map((item) => (
-                            <NextcloudNode key={item.path} item={item} level={0} />
-                        ))}
+                        {/* Projects (from Nextcloud) */}
+                        {rootNextcloudItems.length > 0 && (
+                            <>
+                                <Text size="xs" fw={600} c="dimmed" className="px-2 py-1 uppercase tracking-wide">
+                                    Projects
+                                </Text>
+                                {rootNextcloudItems.map((item) => (
+                                    <NextcloudNode key={item.path} item={item} level={0} />
+                                ))}
+                            </>
+                        )}
 
                         {/* Zeus Memory Nodes */}
                         {rootNodes.map((node) => (
