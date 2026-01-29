@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState } from "react";
 import { Box, Modal, TextInput, Button, Group, Text, SegmentedControl } from "@mantine/core";
-import { IconFolderOpen, IconNetwork } from "@tabler/icons-react";
+import { IconFolderOpen, IconNetwork, IconZoomScan, Icon3dCubeSphere } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useAtlasStore } from "@/store/atlasStore";
 import { TreePane } from "./TreePane";
@@ -10,6 +10,7 @@ import { DocumentPane } from "./DocumentPane";
 import { AgentPane } from "./AgentPane";
 import { AlertsPane } from "./AlertsPane";
 import { AthenaPane } from "./AthenaPane";
+import { SigmaGraph } from "./SigmaGraph";
 import {
     fetchAtlasNodes,
     createAtlasNode,
@@ -21,7 +22,8 @@ type LeftPaneView = "documents" | "knowledge-graph";
 
 // Available knowledge graphs
 const KNOWLEDGE_GRAPHS = [
-    { id: "zeus", label: "Zeus Memory", url: "https://athena.aldc.io/viz/zeus", description: "Organizational decisions & learnings" },
+    { id: "zeus-semantic", label: "Zeus Semantic Zoom", url: null, description: "50K+ memories with semantic clustering", isNative: true },
+    { id: "zeus", label: "Zeus Memory (3D)", url: "https://athena.aldc.io/viz/zeus", description: "Organizational decisions & learnings" },
     { id: "fbc", label: "Food Banks Canada", url: "https://athena.aldc.io/viz/fbc", description: "Food Banks Canada knowledge" },
     { id: "gep", label: "GEP", url: "https://athena.aldc.io/viz/gep", description: "GEP client knowledge" },
     { id: "fusion92", label: "Fusion92", url: "https://athena.aldc.io/viz/f92", description: "Fusion92 client knowledge" },
@@ -330,26 +332,30 @@ Atlas connects to Zeus Memory to provide persistent storage and AI-assisted docu
                                     <Text fw={600} size="sm">Knowledge Graphs</Text>
                                 </Box>
                                 <Box className="flex-1 overflow-y-auto p-2">
-                                    {KNOWLEDGE_GRAPHS.map((graph) => (
-                                        <Box
-                                            key={graph.id}
-                                            className={`
-                                                p-2 rounded cursor-pointer mb-1 transition-colors
-                                                ${selectedGraphId === graph.id
-                                                    ? "bg-blue-100 dark:bg-blue-900"
-                                                    : "hover:bg-gray-100 dark:hover:bg-gray-800"}
-                                            `}
-                                            onClick={() => setSelectedGraphId(graph.id)}
-                                        >
-                                            <Group gap="xs">
-                                                <IconNetwork size={16} className={selectedGraphId === graph.id ? "text-blue-500" : "text-gray-500"} />
-                                                <Box>
-                                                    <Text size="sm" fw={500}>{graph.label}</Text>
-                                                    <Text size="xs" c="dimmed">{graph.description}</Text>
-                                                </Box>
-                                            </Group>
-                                        </Box>
-                                    ))}
+                                    {KNOWLEDGE_GRAPHS.map((graph) => {
+                                        const IconComponent = graph.id === "zeus-semantic" ? IconZoomScan :
+                                                             graph.id.includes("zeus") || graph.id === "fbc" || graph.id === "gep" || graph.id === "fusion92" || graph.id === "aldc" ? Icon3dCubeSphere : IconNetwork;
+                                        return (
+                                            <Box
+                                                key={graph.id}
+                                                className={`
+                                                    p-2 rounded cursor-pointer mb-1 transition-colors
+                                                    ${selectedGraphId === graph.id
+                                                        ? "bg-blue-100 dark:bg-blue-900"
+                                                        : "hover:bg-gray-100 dark:hover:bg-gray-800"}
+                                                `}
+                                                onClick={() => setSelectedGraphId(graph.id)}
+                                            >
+                                                <Group gap="xs">
+                                                    <IconComponent size={16} className={selectedGraphId === graph.id ? "text-blue-500" : "text-gray-500"} />
+                                                    <Box>
+                                                        <Text size="sm" fw={500}>{graph.label}</Text>
+                                                        <Text size="xs" c="dimmed">{graph.description}</Text>
+                                                    </Box>
+                                                </Group>
+                                            </Box>
+                                        );
+                                    })}
                                 </Box>
                             </Box>
                             {/* Zeus Console in bottom half */}
@@ -366,8 +372,10 @@ Atlas connects to Zeus Memory to provide persistent storage and AI-assisted docu
                 <Box className="flex-1 overflow-hidden">
                     {leftPaneView === "documents" ? (
                         <DocumentPane onSave={handleSave} />
+                    ) : selectedGraph.id === "zeus-semantic" ? (
+                        <SigmaGraph />
                     ) : (
-                        <AthenaPane graphUrl={selectedGraph.url} graphName={selectedGraph.label} />
+                        <AthenaPane graphUrl={selectedGraph.url || ""} graphName={selectedGraph.label} />
                     )}
                 </Box>
 
