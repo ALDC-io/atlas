@@ -5,6 +5,21 @@ import type {
     AgentMessage,
     AgentAction,
 } from "@/types/atlas";
+import type { NextcloudFile } from "@/lib/nextcloudApi";
+
+// Nextcloud item converted to tree-compatible format
+export interface NextcloudTreeItem {
+    id: string; // path as ID
+    name: string;
+    path: string;
+    type: "file" | "directory";
+    size: number;
+    lastModified: string;
+    mimeType?: string;
+    children: string[]; // child paths
+    isLoaded: boolean; // whether children have been fetched
+    isNextcloud: true; // marker to identify Nextcloud items
+}
 
 interface AtlasStore {
     // Tree State
@@ -14,6 +29,13 @@ interface AtlasStore {
     expandedIds: Set<string>;
     searchQuery: string;
     isLoading: boolean;
+
+    // Nextcloud State
+    nextcloudItems: Record<string, NextcloudTreeItem>;
+    nextcloudRootIds: string[];
+    nextcloudLoading: boolean;
+    selectedNextcloudPath: string | null;
+    nextcloudContent: string | null;
 
     // Document State
     editMode: boolean;
@@ -35,6 +57,14 @@ interface AtlasStore {
     addNode: (node: AtlasNode) => void;
     updateNode: (nodeId: string, updates: Partial<AtlasNode>) => void;
     deleteNode: (nodeId: string) => void;
+
+    // Nextcloud Actions
+    setNextcloudItems: (items: NextcloudFile[], parentPath?: string) => void;
+    selectNextcloudItem: (path: string | null) => void;
+    setNextcloudContent: (content: string | null) => void;
+    setNextcloudLoading: (loading: boolean) => void;
+    loadNextcloudFolder: (path: string) => Promise<void>;
+    loadNextcloudFile: (path: string) => Promise<void>;
 
     // Document Actions
     setEditMode: (mode: boolean) => void;
@@ -62,6 +92,13 @@ export const useAtlasStore = create<AtlasStore>((set, get) => ({
     expandedIds: new Set(),
     searchQuery: "",
     isLoading: false,
+
+    // Initial Nextcloud State
+    nextcloudItems: {},
+    nextcloudRootIds: [],
+    nextcloudLoading: false,
+    selectedNextcloudPath: null,
+    nextcloudContent: null,
 
     // Initial Document State
     editMode: false,
@@ -199,6 +236,106 @@ export const useAtlasStore = create<AtlasStore>((set, get) => ({
         })),
 
     clearAgentMessages: () => set({ agentMessages: [] }),
+
+    // Nextcloud Actions
+    setNextcloudItems: (items, parentPath) => {
+        const state = get();
+        const nextcloudItems = { ...state.nextcloudItems };
+
+        // Convert items to tree format
+        for (const item of items) {
+            const treeItem: NextcloudTreeItem = {
+                id: item.path,
+                name: item.name,
+                path: item.path,
+                type: item.type,
+                size: item.size,
+                lastModified: item.lastModified,
+                mimeType: item.mimeType,
+                children: [],
+                isLoaded: false,
+                isNextcloud: true,
+            };
+            nextcloudItems[item.path] = treeItem;
+        }
+
+        // Update parent's children if parentPath provided
+        if (parentPath && nextcloudItems[parentPath]) {
+            nextcloudItems[parentPath] = {
+                ...nextcloudItems[parentPath],
+                children: items.map(i => i.path),
+                isLoaded: true,
+            };
+        }
+
+        // If no parent, these are root items
+        const nextcloudRootIds = parentPath
+            ? state.nextcloudRootIds
+            : items.map(i => i.path);
+
+        set({ nextcloudItems, nextcloudRootIds });
+    },
+
+    selectNextcloudItem: (path) => {
+        set({
+            selectedNextcloudPath: path,
+            selectedNodeId: null, // Deselect Zeus node
+            nextcloudContent: null,
+            editMode: false,
+        });
+    },
+
+    setNextcloudContent: (content) => {
+        set({ nextcloudContent: content, draftContent: content || "" });
+    },
+
+    setNextcloudLoading: (loading) => set({ nextcloudLoading: loading }),
+
+    loadNextcloudFolder: async (path) => {
+        const state = get();
+        const item = state.nextcloudItems[path];
+
+        // Skip if already loaded
+        if (item?.isLoaded) return;
+
+        set({ nextcloudLoading: true });
+        try {
+            const response = await fetch("/api/nextcloud/list", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path }),
+            });
+
+            if (response.ok) {
+                const files = await response.json();
+                get().setNextcloudItems(files, path);
+            }
+        } catch (error) {
+            console.error("Failed to load Nextcloud folder:", error);
+        } finally {
+            set({ nextcloudLoading: false });
+        }
+    },
+
+    loadNextcloudFile: async (path) => {
+        set({ nextcloudLoading: true, nextcloudContent: null });
+        try {
+            const response = await fetch("/api/nextcloud/file", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                set({ nextcloudContent: data.content, draftContent: data.content });
+            }
+        } catch (error) {
+            console.error("Failed to load Nextcloud file:", error);
+        } finally {
+            set({ nextcloudLoading: false });
+        }
+    },
 
     // Utility
     getSelectedNode: () => {

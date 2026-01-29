@@ -11,10 +11,10 @@ import {
     Textarea,
     Badge,
     Paper,
+    Loader,
 } from "@mantine/core";
 import {
     IconEdit,
-    IconEye,
     IconHistory,
     IconDeviceFloppy,
     IconX,
@@ -38,36 +38,119 @@ export function DocumentPane({ onSave }: DocumentPaneProps) {
         setEditMode,
         setDraftContent,
         toggleHistory,
+        // Nextcloud state
+        selectedNextcloudPath,
+        nextcloudItems,
+        nextcloudContent,
+        nextcloudLoading,
     } = useAtlasStore();
 
     const selectedNode = selectedNodeId ? nodes[selectedNodeId] : null;
+    const selectedNextcloudItem = selectedNextcloudPath ? nextcloudItems[selectedNextcloudPath] : null;
+
+    // Determine what content to display
+    const isNextcloudFile = selectedNextcloudPath && selectedNextcloudItem?.type === "file";
+    const displayTitle = selectedNode?.title || selectedNextcloudItem?.name || "";
+    const displayContent = selectedNode?.content || nextcloudContent || "";
 
     useEffect(() => {
         if (selectedNode) {
             setDraftContent(selectedNode.content);
+        } else if (nextcloudContent) {
+            setDraftContent(nextcloudContent);
         }
-    }, [selectedNodeId, selectedNode, setDraftContent]);
+    }, [selectedNodeId, selectedNode, nextcloudContent, setDraftContent]);
 
     const handleSave = async () => {
-        if (!selectedNode) return;
-        await onSave(draftContent);
-        setEditMode(false);
+        if (selectedNode) {
+            await onSave(draftContent);
+            setEditMode(false);
+        } else if (selectedNextcloudPath) {
+            // Save to Nextcloud
+            try {
+                const response = await fetch("/api/nextcloud/save", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        path: selectedNextcloudPath,
+                        content: draftContent,
+                    }),
+                });
+                if (response.ok) {
+                    setEditMode(false);
+                }
+            } catch (error) {
+                console.error("Failed to save to Nextcloud:", error);
+            }
+        }
     };
 
     const handleCancel = () => {
         if (selectedNode) {
             setDraftContent(selectedNode.content);
+        } else if (nextcloudContent) {
+            setDraftContent(nextcloudContent);
         }
         setEditMode(false);
     };
 
-    if (!selectedNode) {
+    // Show loading state for Nextcloud
+    if (nextcloudLoading && selectedNextcloudPath) {
+        return (
+            <Box className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-800">
+                <Loader size="lg" />
+            </Box>
+        );
+    }
+
+    // Show empty state if nothing selected
+    if (!selectedNode && !selectedNextcloudItem) {
         return (
             <Box className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-800">
                 <Text c="dimmed" ta="center">
                     Select a document from the tree
                     <br />
                     or create a new one
+                </Text>
+            </Box>
+        );
+    }
+
+    // Show folder info for Nextcloud directories
+    if (selectedNextcloudItem?.type === "directory") {
+        return (
+            <Box className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-800">
+                <Text c="dimmed" ta="center">
+                    <Text fw={600} size="lg" mb="xs">
+                        {selectedNextcloudItem.name}
+                    </Text>
+                    Folder
+                </Text>
+            </Box>
+        );
+    }
+
+    // Check if file is viewable text
+    const isTextFile = isNextcloudFile && (
+        selectedNextcloudItem.mimeType?.startsWith("text/") ||
+        [".md", ".txt", ".json", ".yaml", ".yml"].some(ext =>
+            selectedNextcloudItem.name.toLowerCase().endsWith(ext)
+        )
+    );
+
+    // Show non-text file info
+    if (isNextcloudFile && !isTextFile && !nextcloudContent) {
+        return (
+            <Box className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-800">
+                <Text c="dimmed" ta="center">
+                    <Text fw={600} size="lg" mb="xs">
+                        {selectedNextcloudItem.name}
+                    </Text>
+                    {selectedNextcloudItem.mimeType || "Binary file"}
+                    <br />
+                    <Text size="xs" mt="xs">
+                        {formatFileSize(selectedNextcloudItem.size)}
+                    </Text>
                 </Text>
             </Box>
         );
@@ -80,7 +163,7 @@ export function DocumentPane({ onSave }: DocumentPaneProps) {
                 <Group justify="space-between">
                     <Group gap="xs">
                         <Text fw={600} size="lg">
-                            {selectedNode.title}
+                            {displayTitle}
                         </Text>
                         {editMode && (
                             <Badge color="yellow" size="sm">
@@ -118,13 +201,15 @@ export function DocumentPane({ onSave }: DocumentPaneProps) {
                                 >
                                     <IconEdit size={16} />
                                 </ActionIcon>
-                                <ActionIcon
-                                    variant={showHistory ? "filled" : "light"}
-                                    onClick={toggleHistory}
-                                    title="History"
-                                >
-                                    <IconHistory size={16} />
-                                </ActionIcon>
+                                {selectedNode && (
+                                    <ActionIcon
+                                        variant={showHistory ? "filled" : "light"}
+                                        onClick={toggleHistory}
+                                        title="History"
+                                    >
+                                        <IconHistory size={16} />
+                                    </ActionIcon>
+                                )}
                             </>
                         )}
                     </Group>
@@ -133,8 +218,8 @@ export function DocumentPane({ onSave }: DocumentPaneProps) {
 
             {/* Content */}
             <Box className="flex-1 overflow-hidden">
-                {showHistory ? (
-                    // History View
+                {showHistory && selectedNode ? (
+                    // History View (only for Zeus nodes)
                     <Tabs defaultValue="current" className="h-full flex flex-col">
                         <Tabs.List className="px-3">
                             <Tabs.Tab value="current">Current</Tabs.Tab>
@@ -222,7 +307,7 @@ export function DocumentPane({ onSave }: DocumentPaneProps) {
                 ) : (
                     // Preview Mode
                     <Box className="h-full overflow-y-auto p-4">
-                        <MarkdownContent content={selectedNode.content} />
+                        <MarkdownContent content={displayContent} />
                     </Box>
                 )}
             </Box>
@@ -244,4 +329,12 @@ function MarkdownContent({ content }: { content: string }) {
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
         </Box>
     );
+}
+
+function formatFileSize(bytes: number): string {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
