@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
-import { Box, Modal, TextInput, Button, Group, Text, SegmentedControl } from "@mantine/core";
+import dynamic from "next/dynamic";
+import { Box, Modal, TextInput, Button, Group, Text, SegmentedControl, Loader } from "@mantine/core";
 import { IconFolderOpen, IconNetwork, IconZoomScan, Icon3dCubeSphere } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useAtlasStore } from "@/store/atlasStore";
@@ -10,7 +11,19 @@ import { DocumentPane } from "./DocumentPane";
 import { AgentPane } from "./AgentPane";
 import { AlertsPane } from "./AlertsPane";
 import { AthenaPane } from "./AthenaPane";
-import { SigmaGraph } from "./SigmaGraph";
+
+// Dynamic import to prevent SSR issues with WebGL/Sigma.js
+const SigmaGraph = dynamic(() => import("./SigmaGraph").then(mod => mod.SigmaGraph), {
+    ssr: false,
+    loading: () => (
+        <Box className="h-full flex items-center justify-center bg-gray-900">
+            <Box className="text-center">
+                <Loader size="lg" color="blue" mb="md" />
+                <Text c="dimmed">Loading Semantic Zoom...</Text>
+            </Box>
+        </Box>
+    ),
+});
 import {
     fetchAtlasNodes,
     createAtlasNode,
