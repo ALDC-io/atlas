@@ -1,19 +1,31 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
-import { Box, Modal, TextInput, Button, Group, Text } from "@mantine/core";
+import { Box, Modal, TextInput, Button, Group, Text, SegmentedControl } from "@mantine/core";
+import { IconFolderOpen, IconNetwork } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useAtlasStore } from "@/store/atlasStore";
 import { TreePane } from "./TreePane";
 import { DocumentPane } from "./DocumentPane";
 import { AgentPane } from "./AgentPane";
 import { AlertsPane } from "./AlertsPane";
+import { AthenaPane } from "./AthenaPane";
 import {
     fetchAtlasNodes,
     createAtlasNode,
     updateAtlasNode,
 } from "@/lib/zeusApi";
 import type { AtlasNode } from "@/types/atlas";
+
+type LeftPaneView = "documents" | "knowledge-graph";
+
+// Available knowledge graphs
+const KNOWLEDGE_GRAPHS = [
+    { id: "zeus", label: "Zeus Memory", url: "https://athena.aldc.io", description: "Organizational decisions & learnings" },
+    { id: "gep", label: "GEP", url: "https://athena.aldc.io?tenant=gep", description: "GEP client knowledge" },
+    { id: "fusion92", label: "Fusion92", url: "https://athena.aldc.io?tenant=fusion92", description: "Fusion92 client knowledge" },
+    { id: "aldc", label: "ALDC Internal", url: "https://athena.aldc.io?tenant=aldc", description: "ALDC internal operations" },
+];
 
 const ZEUS_API_KEY = process.env.NEXT_PUBLIC_ZEUS_API_KEY || "";
 
@@ -32,6 +44,10 @@ export function AtlasWorkspace() {
     const [createModalOpen, setCreateModalOpen] = useState(false);
     const [newNodeTitle, setNewNodeTitle] = useState("");
     const [isCreating, setIsCreating] = useState(false);
+    const [leftPaneView, setLeftPaneView] = useState<LeftPaneView>("documents");
+    const [selectedGraphId, setSelectedGraphId] = useState<string>(KNOWLEDGE_GRAPHS[0].id);
+
+    const selectedGraph = KNOWLEDGE_GRAPHS.find(g => g.id === selectedGraphId) || KNOWLEDGE_GRAPHS[0];
 
     // Load nodes on mount
     useEffect(() => {
@@ -262,25 +278,100 @@ Atlas connects to Zeus Memory to provide persistent storage and AI-assisted docu
     return (
         <>
             <Box className="h-screen flex">
-                {/* Left Sidebar - Tree + Feed */}
+                {/* Left Sidebar */}
                 <Box className="w-64 flex-shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-700">
-                    {/* Tree Pane */}
-                    <Box className="flex-1 overflow-hidden">
-                        <TreePane onCreateNode={() => setCreateModalOpen(true)} />
+                    {/* View Switcher */}
+                    <Box className="p-2 border-b border-gray-200 dark:border-gray-700">
+                        <SegmentedControl
+                            fullWidth
+                            size="xs"
+                            value={leftPaneView}
+                            onChange={(value) => setLeftPaneView(value as LeftPaneView)}
+                            data={[
+                                {
+                                    value: "documents",
+                                    label: (
+                                        <Group gap={4} justify="center">
+                                            <IconFolderOpen size={14} />
+                                            <span>Documents</span>
+                                        </Group>
+                                    ),
+                                },
+                                {
+                                    value: "knowledge-graph",
+                                    label: (
+                                        <Group gap={4} justify="center">
+                                            <IconNetwork size={14} />
+                                            <span>Knowledge Graph</span>
+                                        </Group>
+                                    ),
+                                },
+                            ]}
+                        />
                     </Box>
-                    {/* CCE Feed */}
-                    <Box className="h-48 border-t border-gray-200 dark:border-gray-700">
-                        <AlertsPane />
-                    </Box>
+
+                    {leftPaneView === "documents" ? (
+                        <>
+                            {/* Tree Pane */}
+                            <Box className="flex-1 overflow-hidden">
+                                <TreePane onCreateNode={() => setCreateModalOpen(true)} />
+                            </Box>
+                            {/* CCE Feed */}
+                            <Box className="h-48 border-t border-gray-200 dark:border-gray-700">
+                                <AlertsPane />
+                            </Box>
+                        </>
+                    ) : (
+                        /* Knowledge Graph List + Zeus Console */
+                        <>
+                            <Box className="flex-1 overflow-hidden flex flex-col">
+                                <Box className="p-3 border-b border-gray-200 dark:border-gray-700">
+                                    <Text fw={600} size="sm">Knowledge Graphs</Text>
+                                </Box>
+                                <Box className="flex-1 overflow-y-auto p-2">
+                                    {KNOWLEDGE_GRAPHS.map((graph) => (
+                                        <Box
+                                            key={graph.id}
+                                            className={`
+                                                p-2 rounded cursor-pointer mb-1 transition-colors
+                                                ${selectedGraphId === graph.id
+                                                    ? "bg-blue-100 dark:bg-blue-900"
+                                                    : "hover:bg-gray-100 dark:hover:bg-gray-800"}
+                                            `}
+                                            onClick={() => setSelectedGraphId(graph.id)}
+                                        >
+                                            <Group gap="xs">
+                                                <IconNetwork size={16} className={selectedGraphId === graph.id ? "text-blue-500" : "text-gray-500"} />
+                                                <Box>
+                                                    <Text size="sm" fw={500}>{graph.label}</Text>
+                                                    <Text size="xs" c="dimmed">{graph.description}</Text>
+                                                </Box>
+                                            </Group>
+                                        </Box>
+                                    ))}
+                                </Box>
+                            </Box>
+                            {/* Zeus Console in bottom half */}
+                            {agentOpen && (
+                                <Box className="h-1/2 border-t border-gray-200 dark:border-gray-700">
+                                    <AgentPane />
+                                </Box>
+                            )}
+                        </>
+                    )}
                 </Box>
 
-                {/* Document Pane - Center */}
+                {/* Center Pane - Document or Knowledge Graph */}
                 <Box className="flex-1 overflow-hidden">
-                    <DocumentPane onSave={handleSave} />
+                    {leftPaneView === "documents" ? (
+                        <DocumentPane onSave={handleSave} />
+                    ) : (
+                        <AthenaPane graphUrl={selectedGraph.url} graphName={selectedGraph.label} />
+                    )}
                 </Box>
 
-                {/* Zeus Console - Right */}
-                {agentOpen && (
+                {/* Zeus Console - Right (only show in Documents view) */}
+                {agentOpen && leftPaneView === "documents" && (
                     <Box className="w-80 flex-shrink-0">
                         <AgentPane />
                     </Box>
