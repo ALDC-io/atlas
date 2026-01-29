@@ -1,13 +1,8 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
-import { Box, Modal, TextInput, Button, Group as MantineGroup, Text } from "@mantine/core";
+import { Box, Modal, TextInput, Button, Group, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import {
-    Panel,
-    Group as PanelGroup,
-    Separator as PanelSeparator,
-} from "react-resizable-panels";
 import { useAtlasStore } from "@/store/atlasStore";
 import { TreePane } from "./TreePane";
 import { DocumentPane } from "./DocumentPane";
@@ -21,21 +16,6 @@ import {
 import type { AtlasNode } from "@/types/atlas";
 
 const ZEUS_API_KEY = process.env.NEXT_PUBLIC_ZEUS_API_KEY || "";
-
-// Resize handle component
-function ResizeHandle({ direction = "horizontal" }: { direction?: "horizontal" | "vertical" }) {
-    return (
-        <PanelSeparator
-            className={`
-                ${direction === "horizontal" ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize"}
-                bg-gray-200 dark:bg-gray-700
-                hover:bg-blue-400 dark:hover:bg-blue-500
-                active:bg-blue-500 dark:active:bg-blue-400
-                transition-colors
-            `}
-        />
-    );
-}
 
 export function AtlasWorkspace() {
     const {
@@ -281,40 +261,30 @@ Atlas connects to Zeus Memory to provide persistent storage and AI-assisted docu
 
     return (
         <>
-            <Box className="h-screen">
-                <PanelGroup orientation="horizontal" className="h-full">
-                    {/* Left Sidebar - Tree + Feed */}
-                    <Panel defaultSize={20} minSize={15} maxSize={40}>
-                        <PanelGroup orientation="vertical" className="h-full">
-                            {/* Tree Pane */}
-                            <Panel defaultSize={70} minSize={30}>
-                                <TreePane onCreateNode={() => setCreateModalOpen(true)} />
-                            </Panel>
-                            <ResizeHandle direction="vertical" />
-                            {/* CCE Feed */}
-                            <Panel defaultSize={30} minSize={15}>
-                                <AlertsPane />
-                            </Panel>
-                        </PanelGroup>
-                    </Panel>
+            <Box className="h-screen flex">
+                {/* Left Sidebar - Tree + Feed */}
+                <Box className="w-64 flex-shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-700">
+                    {/* Tree Pane */}
+                    <Box className="flex-1 overflow-hidden">
+                        <TreePane onCreateNode={() => setCreateModalOpen(true)} />
+                    </Box>
+                    {/* CCE Feed */}
+                    <Box className="h-48 border-t border-gray-200 dark:border-gray-700">
+                        <AlertsPane />
+                    </Box>
+                </Box>
 
-                    <ResizeHandle />
+                {/* Document Pane - Center */}
+                <Box className="flex-1 overflow-hidden">
+                    <DocumentPane onSave={handleSave} />
+                </Box>
 
-                    {/* Document Pane - Center */}
-                    <Panel defaultSize={agentOpen ? 55 : 80} minSize={30}>
-                        <DocumentPane onSave={handleSave} />
-                    </Panel>
-
-                    {/* Zeus Console - Right */}
-                    {agentOpen && (
-                        <>
-                            <ResizeHandle />
-                            <Panel defaultSize={25} minSize={20} maxSize={50}>
-                                <AgentPane />
-                            </Panel>
-                        </>
-                    )}
-                </PanelGroup>
+                {/* Zeus Console - Right */}
+                {agentOpen && (
+                    <Box className="w-80 flex-shrink-0">
+                        <AgentPane />
+                    </Box>
+                )}
             </Box>
 
             {/* Create Document Modal */}
@@ -341,7 +311,7 @@ Atlas connects to Zeus Memory to provide persistent storage and AI-assisted docu
                         Will be created as a child of the selected document
                     </Text>
                 )}
-                <MantineGroup justify="flex-end" mt="md">
+                <Group justify="flex-end" mt="md">
                     <Button
                         variant="light"
                         onClick={() => setCreateModalOpen(false)}
@@ -355,7 +325,7 @@ Atlas connects to Zeus Memory to provide persistent storage and AI-assisted docu
                     >
                         Create
                     </Button>
-                </MantineGroup>
+                </Group>
             </Modal>
         </>
     );

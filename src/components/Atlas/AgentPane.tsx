@@ -287,24 +287,23 @@ function MessageBubble({ message }: { message: AgentMessage }) {
         <Box className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
             <Paper
                 p="xs"
-                className={`max-w-[85%] ${
-                    isUser
-                        ? "bg-blue-500"
-                        : "bg-gray-100 dark:bg-gray-800"
-                }`}
                 radius="md"
+                style={{
+                    maxWidth: "85%",
+                    backgroundColor: isUser ? "#3b82f6" : "#f3f4f6",
+                }}
             >
                 <Group gap="xs" mb={4}>
                     {isUser ? (
-                        <IconUser size={12} className="text-white" />
+                        <IconUser size={12} style={{ color: "#ffffff" }} />
                     ) : (
-                        <IconBolt size={12} className="text-yellow-500" />
+                        <IconBolt size={12} style={{ color: "#eab308" }} />
                     )}
-                    <Text size="xs" fw={500} c={isUser ? "white" : "dark"}>
+                    <Text size="xs" fw={500} style={{ color: isUser ? "#ffffff" : "#111827" }}>
                         {isUser ? "You" : "Zeus"}
                     </Text>
                 </Group>
-                <Text size="sm" c={isUser ? "white" : "dark"} style={{ whiteSpace: "pre-wrap" }}>
+                <Text size="sm" style={{ whiteSpace: "pre-wrap", color: isUser ? "#ffffff" : "#111827" }}>
                     {message.content}
                 </Text>
             </Paper>
