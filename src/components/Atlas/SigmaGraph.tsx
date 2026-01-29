@@ -105,7 +105,7 @@ export function SigmaGraph() {
                     size: Math.max(5, Math.min(30, Math.sqrt(cluster.size) * 2)),
                     label: cluster.label,
                     color: cluster.color || "#718096",
-                    type: "cluster",
+                    nodeType: "cluster",
                     level: "l2",
                     clusterSize: cluster.size,
                 });
@@ -162,7 +162,7 @@ export function SigmaGraph() {
                     size: Math.max(4, Math.min(25, Math.sqrt(cluster.size) * 1.5)),
                     label: cluster.label,
                     color: cluster.color || "#4299e1",
-                    type: "cluster",
+                    nodeType: "cluster",
                     level: "l1",
                     clusterSize: cluster.size,
                     parentL2: l2Id,
@@ -223,7 +223,7 @@ export function SigmaGraph() {
                     size: 3,
                     label: memory.content_preview.substring(0, 30) + "...",
                     color: getCategoryColor(memory.category),
-                    type: "memory",
+                    nodeType: "memory",
                     level: "memory",
                     category: memory.category,
                     content_preview: memory.content_preview,
@@ -253,7 +253,7 @@ export function SigmaGraph() {
     const handleNodeClick = useCallback(
         async (nodeId: string, nodeData: Record<string, unknown>) => {
             const level = nodeData.level as string;
-            const nodeType = nodeData.type as string;
+            const nodeType = nodeData.nodeType as string;
 
             if (nodeType === "cluster") {
                 if (level === "l2") {
