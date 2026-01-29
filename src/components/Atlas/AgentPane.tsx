@@ -34,12 +34,22 @@ export function AgentPane() {
         toggleAgent,
         setAgentProcessing,
         addAgentMessage,
+        // Nextcloud state
+        selectedNextcloudPath,
+        nextcloudItems,
+        nextcloudContent,
     } = useAtlasStore();
 
     const [customPrompt, setCustomPrompt] = useState("");
     const scrollRef = useRef<HTMLDivElement>(null);
 
     const selectedNode = selectedNodeId ? nodes[selectedNodeId] : null;
+    const selectedNextcloudItem = selectedNextcloudPath ? nextcloudItems[selectedNextcloudPath] : null;
+
+    // Determine current document context (Zeus node or Nextcloud file)
+    const hasContext = selectedNode || (selectedNextcloudItem?.type === "file" && nextcloudContent);
+    const contextTitle = selectedNode?.title || selectedNextcloudItem?.name || "";
+    const contextContent = selectedNode?.content || nextcloudContent || "";
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -79,10 +89,10 @@ export function AgentPane() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     messages: apiMessages,
-                    context: selectedNode
+                    context: hasContext
                         ? {
-                              nodeTitle: selectedNode.title,
-                              nodeContent: selectedNode.content,
+                              nodeTitle: contextTitle,
+                              nodeContent: contextContent,
                           }
                         : undefined,
                 }),
@@ -122,13 +132,13 @@ export function AgentPane() {
                 prompt = "Create a new document. What topic would you like me to write about?";
                 break;
             case "propose_revision":
-                prompt = selectedNode
-                    ? `Please review the current document "${selectedNode.title}" and suggest improvements. Focus on clarity, structure, and completeness.`
+                prompt = hasContext
+                    ? `Please review the current document "${contextTitle}" and suggest improvements. Focus on clarity, structure, and completeness.`
                     : "Please select a document first to propose revisions.";
                 break;
             case "create_subtopics":
-                prompt = selectedNode
-                    ? `Based on the document "${selectedNode.title}", suggest 3-5 subtopics that could be created as child documents to expand on this content.`
+                prompt = hasContext
+                    ? `Based on the document "${contextTitle}", suggest 3-5 subtopics that could be created as child documents to expand on this content.`
                     : "Please select a document first to generate subtopics.";
                 break;
         }
@@ -189,7 +199,7 @@ export function AgentPane() {
                     variant="light"
                     leftSection={<IconPencil size={16} />}
                     onClick={() => handleAction("propose_revision")}
-                    disabled={agentProcessing || !selectedNode}
+                    disabled={agentProcessing || !hasContext}
                     justify="flex-start"
                 >
                     Propose Revision
@@ -200,7 +210,7 @@ export function AgentPane() {
                     variant="light"
                     leftSection={<IconListTree size={16} />}
                     onClick={() => handleAction("create_subtopics")}
-                    disabled={agentProcessing || !selectedNode}
+                    disabled={agentProcessing || !hasContext}
                     justify="flex-start"
                 >
                     Create Subtopics
@@ -208,18 +218,18 @@ export function AgentPane() {
             </Box>
 
             {/* Context Info */}
-            {selectedNode && (
+            {hasContext && (
                 <Box className="p-3 border-b border-gray-200 dark:border-gray-700">
                     <Text size="xs" c="dimmed">
                         Context
                     </Text>
                     <Paper p="xs" mt="xs" withBorder>
                         <Text size="xs" fw={500} truncate>
-                            {selectedNode.title}
+                            {contextTitle}
                         </Text>
                         <Text size="xs" c="dimmed" lineClamp={2}>
-                            {selectedNode.content.slice(0, 100)}
-                            {selectedNode.content.length > 100 ? "..." : ""}
+                            {contextContent.slice(0, 100)}
+                            {contextContent.length > 100 ? "..." : ""}
                         </Text>
                     </Paper>
                 </Box>
