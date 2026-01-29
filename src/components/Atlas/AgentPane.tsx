@@ -11,6 +11,10 @@ import {
     Textarea,
     Loader,
     ScrollArea,
+    Modal,
+    TextInput,
+    Select,
+    Stack,
 } from "@mantine/core";
 import {
     IconX,
@@ -20,9 +24,31 @@ import {
     IconSend,
     IconBolt,
     IconUser,
+    IconPlus,
+    IconChartBar,
+    IconClock,
+    IconChecklist,
+    IconLayoutKanban,
+    IconUsers,
+    IconNotes,
+    IconAlertTriangle,
+    IconFileDescription,
 } from "@tabler/icons-react";
 import { useAtlasStore } from "@/store/atlasStore";
+import { ARTIFACT_TEMPLATES, generateArtifact } from "@/lib/artifactTemplates";
 import type { AgentAction, AgentMessage } from "@/types/atlas";
+
+// Icon mapping for artifact types
+const ARTIFACT_ICONS: Record<string, React.ReactNode> = {
+    gantt: <IconChartBar size={16} />,
+    timeline: <IconClock size={16} />,
+    tasks: <IconChecklist size={16} />,
+    kanban: <IconLayoutKanban size={16} />,
+    raci: <IconUsers size={16} />,
+    "meeting-notes": <IconNotes size={16} />,
+    "risk-register": <IconAlertTriangle size={16} />,
+    requirements: <IconFileDescription size={16} />,
+};
 
 export function AgentPane() {
     const {
@@ -38,10 +64,19 @@ export function AgentPane() {
         selectedNextcloudPath,
         nextcloudItems,
         nextcloudContent,
+        createNextcloudFile,
+        selectNextcloudItem,
+        loadNextcloudFile,
     } = useAtlasStore();
 
     const [customPrompt, setCustomPrompt] = useState("");
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Artifact creation state
+    const [createArtifactOpen, setCreateArtifactOpen] = useState(false);
+    const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+    const [projectName, setProjectName] = useState("");
+    const [isCreatingArtifact, setIsCreatingArtifact] = useState(false);
 
     const selectedNode = selectedNodeId ? nodes[selectedNodeId] : null;
     const selectedNextcloudItem = selectedNextcloudPath ? nextcloudItems[selectedNextcloudPath] : null;
@@ -151,6 +186,83 @@ export function AgentPane() {
         setCustomPrompt("");
     };
 
+    // Get the current folder path for artifact creation
+    const getCurrentFolderPath = (): string | null => {
+        if (!selectedNextcloudPath) return null;
+        const item = nextcloudItems[selectedNextcloudPath];
+        if (!item) return null;
+        // If it's a directory, use it; otherwise use parent directory
+        if (item.type === "directory") {
+            return item.path;
+        }
+        // Extract parent path from file path
+        const lastSlash = item.path.lastIndexOf("/");
+        return lastSlash > 0 ? item.path.substring(0, lastSlash) : null;
+    };
+
+    const handleCreateArtifact = async () => {
+        if (!selectedTemplate || !projectName.trim()) return;
+
+        const folderPath = getCurrentFolderPath();
+        if (!folderPath) {
+            addAgentMessage({
+                id: `msg-${Date.now()}`,
+                role: "assistant",
+                content: "Please select a folder in the Projects tree to create the artifact in.",
+                timestamp: new Date().toISOString(),
+            });
+            return;
+        }
+
+        setIsCreatingArtifact(true);
+        try {
+            const template = ARTIFACT_TEMPLATES.find(t => t.id === selectedTemplate);
+            if (!template) return;
+
+            const content = generateArtifact(selectedTemplate, projectName.trim());
+            if (!content) return;
+
+            const filename = `${projectName.trim().toLowerCase().replace(/\s+/g, "-")}-${template.defaultFilename}`;
+            const newPath = await createNextcloudFile(folderPath, filename, content);
+
+            if (newPath) {
+                // Select and load the new file
+                selectNextcloudItem(newPath);
+                await loadNextcloudFile(newPath);
+
+                addAgentMessage({
+                    id: `msg-${Date.now()}`,
+                    role: "assistant",
+                    content: `Created "${filename}" in ${folderPath}. The ${template.name} is ready for you to customize.`,
+                    timestamp: new Date().toISOString(),
+                });
+
+                setCreateArtifactOpen(false);
+                setSelectedTemplate(null);
+                setProjectName("");
+            } else {
+                addAgentMessage({
+                    id: `msg-${Date.now()}`,
+                    role: "assistant",
+                    content: "Failed to create the artifact. Please check folder permissions and try again.",
+                    timestamp: new Date().toISOString(),
+                });
+            }
+        } catch (error) {
+            console.error("Failed to create artifact:", error);
+            addAgentMessage({
+                id: `msg-${Date.now()}`,
+                role: "assistant",
+                content: "An error occurred while creating the artifact.",
+                timestamp: new Date().toISOString(),
+            });
+        } finally {
+            setIsCreatingArtifact(false);
+        }
+    };
+
+    const canCreateArtifact = !!getCurrentFolderPath();
+
     if (!agentOpen) {
         return null;
     }
@@ -182,6 +294,18 @@ export function AgentPane() {
                 <Text size="xs" c="dimmed" mb="xs">
                     Quick Actions
                 </Text>
+
+                <Button
+                    fullWidth
+                    variant="filled"
+                    color="green"
+                    leftSection={<IconPlus size={16} />}
+                    onClick={() => setCreateArtifactOpen(true)}
+                    disabled={agentProcessing || !canCreateArtifact}
+                    justify="flex-start"
+                >
+                    Create Artifact
+                </Button>
 
                 <Button
                     fullWidth
@@ -286,6 +410,83 @@ export function AgentPane() {
                     </ActionIcon>
                 </Group>
             </Box>
+
+            {/* Create Artifact Modal */}
+            <Modal
+                opened={createArtifactOpen}
+                onClose={() => setCreateArtifactOpen(false)}
+                title="Create Project Artifact"
+                centered
+                size="md"
+            >
+                <Stack gap="md">
+                    <TextInput
+                        label="Project Name"
+                        placeholder="Enter project name..."
+                        value={projectName}
+                        onChange={(e) => setProjectName(e.currentTarget.value)}
+                        data-autofocus
+                    />
+
+                    <Box>
+                        <Text size="sm" fw={500} mb="xs">
+                            Select Artifact Type
+                        </Text>
+                        <Stack gap="xs">
+                            {ARTIFACT_TEMPLATES.map((template) => (
+                                <Paper
+                                    key={template.id}
+                                    p="sm"
+                                    withBorder
+                                    className={`cursor-pointer transition-colors ${
+                                        selectedTemplate === template.id
+                                            ? "border-blue-500 bg-blue-50 dark:bg-blue-900"
+                                            : "hover:bg-gray-50 dark:hover:bg-gray-800"
+                                    }`}
+                                    onClick={() => setSelectedTemplate(template.id)}
+                                >
+                                    <Group gap="sm">
+                                        <Box className={selectedTemplate === template.id ? "text-blue-500" : "text-gray-500"}>
+                                            {ARTIFACT_ICONS[template.id] || <IconFileText size={16} />}
+                                        </Box>
+                                        <Box>
+                                            <Text size="sm" fw={500}>
+                                                {template.name}
+                                            </Text>
+                                            <Text size="xs" c="dimmed">
+                                                {template.description}
+                                            </Text>
+                                        </Box>
+                                    </Group>
+                                </Paper>
+                            ))}
+                        </Stack>
+                    </Box>
+
+                    {getCurrentFolderPath() && (
+                        <Text size="xs" c="dimmed">
+                            Will be created in: {getCurrentFolderPath()}
+                        </Text>
+                    )}
+
+                    <Group justify="flex-end" mt="sm">
+                        <Button
+                            variant="light"
+                            onClick={() => setCreateArtifactOpen(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            color="green"
+                            onClick={handleCreateArtifact}
+                            loading={isCreatingArtifact}
+                            disabled={!selectedTemplate || !projectName.trim()}
+                        >
+                            Create Artifact
+                        </Button>
+                    </Group>
+                </Stack>
+            </Modal>
         </Box>
     );
 }
