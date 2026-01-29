@@ -66,6 +66,24 @@ export interface StatsResponse {
     data_loaded: boolean;
 }
 
+export interface SearchResult {
+    id: string;
+    content_preview: string;
+    category: string;
+    cluster_l1: string;
+    cluster_l1_label: string;
+    cluster_l2: string;
+    cluster_l2_label: string;
+    x: number;
+    y: number;
+}
+
+export interface SearchResponse {
+    query: string;
+    total_results: number;
+    results: SearchResult[];
+}
+
 /**
  * Get overview of all L2 (domain) clusters
  * Use for initial zoomed-out view
@@ -127,6 +145,20 @@ export async function getStats(): Promise<StatsResponse> {
     const response = await fetch(`${ATHENA_API_URL}/api/stats`);
     if (!response.ok) {
         throw new Error(`Failed to fetch stats: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * Search memories by content
+ * Returns matching memories with their cluster hierarchy info
+ */
+export async function searchMemories(query: string, limit: number = 20): Promise<SearchResponse> {
+    const response = await fetch(
+        `${ATHENA_API_URL}/api/search?q=${encodeURIComponent(query)}&limit=${limit}`
+    );
+    if (!response.ok) {
+        throw new Error(`Failed to search: ${response.status}`);
     }
     return response.json();
 }

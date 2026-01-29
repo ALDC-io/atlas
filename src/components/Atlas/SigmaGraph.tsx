@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Box, Text, Loader, Badge, Group, Paper, Button, Stack, ActionIcon } from "@mantine/core";
-import { IconZoomIn, IconZoomOut, IconHome, IconInfoCircle } from "@tabler/icons-react";
+import { Box, Text, Loader, Badge, Group, Paper, Button, Stack, ActionIcon, TextInput, ScrollArea, Select } from "@mantine/core";
+import { IconZoomIn, IconZoomOut, IconHome, IconInfoCircle, IconSearch, IconX } from "@tabler/icons-react";
 import Graph from "graphology";
 import Sigma from "sigma";
 import {
@@ -10,10 +10,12 @@ import {
     getL2Detail,
     getL1Detail,
     getMemoryDetail,
+    searchMemories,
     getCategoryColor,
     type ClusterInfo,
     type MemoryInfo,
     type MemoryDetailResponse,
+    type SearchResult,
 } from "@/lib/athenaApi";
 
 type ZoomLevel = "l2" | "l1" | "memories";
@@ -44,6 +46,11 @@ export function SigmaGraph() {
     ]);
     const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
     const [stats, setStats] = useState({ nodes: 0, edges: 0 });
+    const [searchQuery, setSearchQuery] = useState("");
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [showSearch, setShowSearch] = useState(false);
+    const [l2Clusters, setL2Clusters] = useState<{ value: string; label: string }[]>([]);
 
     // Initialize graph and sigma
     useEffect(() => {
@@ -131,6 +138,12 @@ export function SigmaGraph() {
             setZoomLevel("l2");
             setBreadcrumbs([{ level: "l2", id: "root", label: "All Domains" }]);
             setSelectedNode(null);
+
+            // Populate domain selector with sorted clusters
+            const clusterOptions = data.clusters
+                .map((c) => ({ value: c.id, label: `${c.label} (${c.size})` }))
+                .sort((a, b) => a.label.localeCompare(b.label));
+            setL2Clusters(clusterOptions);
 
             sigmaRef.current?.refresh();
             sigmaRef.current?.getCamera().animate({ ratio: 1, x: 0.5, y: 0.5 }, { duration: 500 });
@@ -333,6 +346,74 @@ export function SigmaGraph() {
         sigmaRef.current?.getCamera().animate({ ratio: 1, x: 0.5, y: 0.5 }, { duration: 300 });
     };
 
+    // Search handler
+    const handleSearch = useCallback(async () => {
+        if (!searchQuery.trim() || searchQuery.length < 2) return;
+
+        setIsSearching(true);
+        try {
+            const response = await searchMemories(searchQuery, 20);
+            setSearchResults(response.results);
+        } catch (err) {
+            console.error("Search failed:", err);
+            setSearchResults([]);
+        } finally {
+            setIsSearching(false);
+        }
+    }, [searchQuery]);
+
+    // Handle domain selection from dropdown
+    const handleDomainSelect = useCallback(async (clusterId: string | null) => {
+        if (!clusterId) return;
+
+        const graph = graphRef.current;
+        if (graph && graph.hasNode(clusterId)) {
+            // Animate camera to the selected cluster
+            const nodeAttrs = graph.getNodeAttributes(clusterId);
+            sigmaRef.current?.getCamera().animate(
+                { x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.3 },
+                { duration: 500 }
+            );
+        }
+    }, []);
+
+    // Navigate to a search result's cluster
+    const handleSearchResultClick = useCallback(async (result: SearchResult) => {
+        // First go to L2 overview if not already there
+        if (zoomLevel !== "l2") {
+            await loadL2Overview();
+        }
+
+        // Highlight the L2 cluster containing this memory
+        const graph = graphRef.current;
+        if (graph && graph.hasNode(result.cluster_l2)) {
+            // Animate camera to the cluster
+            const nodeAttrs = graph.getNodeAttributes(result.cluster_l2);
+            sigmaRef.current?.getCamera().animate(
+                { x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.5 },
+                { duration: 500 }
+            );
+
+            // Show result info in sidebar
+            setSelectedNode({
+                id: result.id,
+                type: "memory",
+                label: result.content_preview.substring(0, 50) + "...",
+                data: {
+                    id: result.id,
+                    x: result.x,
+                    y: result.y,
+                    content_preview: result.content_preview,
+                    category: result.category,
+                    cluster_l1: result.cluster_l1,
+                    cluster_l2: result.cluster_l2,
+                } as MemoryInfo,
+            });
+        }
+
+        setShowSearch(false);
+    }, [zoomLevel, loadL2Overview]);
+
     return (
         <Box className="h-full flex bg-gray-900">
             {/* Main Graph Area */}
@@ -356,9 +437,32 @@ export function SigmaGraph() {
                     </Group>
 
                     <Group gap="xs">
+                        {zoomLevel === "l2" && l2Clusters.length > 0 && (
+                            <Select
+                                placeholder="Jump to domain..."
+                                size="xs"
+                                data={l2Clusters}
+                                searchable
+                                clearable
+                                onChange={handleDomainSelect}
+                                w={200}
+                                styles={{
+                                    input: { backgroundColor: "#2d3748", borderColor: "#4a5568", color: "white" },
+                                    dropdown: { backgroundColor: "#2d3748", borderColor: "#4a5568" },
+                                    option: { color: "white" },
+                                }}
+                            />
+                        )}
                         <Badge size="sm" variant="outline" color="gray">
                             {stats.nodes} nodes
                         </Badge>
+                        <ActionIcon
+                            variant={showSearch ? "filled" : "subtle"}
+                            color={showSearch ? "blue" : "gray"}
+                            onClick={() => setShowSearch(!showSearch)}
+                        >
+                            <IconSearch size={16} />
+                        </ActionIcon>
                         <ActionIcon variant="subtle" color="gray" onClick={handleZoomIn}>
                             <IconZoomIn size={16} />
                         </ActionIcon>
@@ -370,6 +474,69 @@ export function SigmaGraph() {
                         </ActionIcon>
                     </Group>
                 </Box>
+
+                {/* Search Panel */}
+                {showSearch && (
+                    <Box className="p-2 border-b border-gray-700 bg-gray-800">
+                        <Group gap="xs" mb="xs">
+                            <TextInput
+                                placeholder="Search memories... (e.g., 'docker', 'authentication')"
+                                size="xs"
+                                className="flex-1"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                                rightSection={
+                                    searchQuery && (
+                                        <ActionIcon size="xs" variant="subtle" onClick={() => {
+                                            setSearchQuery("");
+                                            setSearchResults([]);
+                                        }}>
+                                            <IconX size={12} />
+                                        </ActionIcon>
+                                    )
+                                }
+                            />
+                            <Button size="xs" onClick={handleSearch} loading={isSearching}>
+                                Search
+                            </Button>
+                        </Group>
+                        {searchResults.length > 0 && (
+                            <ScrollArea h={200}>
+                                <Stack gap={4}>
+                                    {searchResults.map((result) => (
+                                        <Paper
+                                            key={result.id}
+                                            p="xs"
+                                            className="cursor-pointer hover:bg-gray-700 transition-colors"
+                                            onClick={() => handleSearchResultClick(result)}
+                                        >
+                                            <Text size="xs" c="white" lineClamp={2}>
+                                                {result.content_preview}
+                                            </Text>
+                                            <Group gap={4} mt={4}>
+                                                <Badge size="xs" color="blue" variant="light">
+                                                    {result.cluster_l2_label}
+                                                </Badge>
+                                                <Badge size="xs" color="cyan" variant="light">
+                                                    {result.cluster_l1_label}
+                                                </Badge>
+                                                <Badge size="xs" color="gray" variant="outline">
+                                                    {result.category}
+                                                </Badge>
+                                            </Group>
+                                        </Paper>
+                                    ))}
+                                </Stack>
+                            </ScrollArea>
+                        )}
+                        {searchResults.length === 0 && searchQuery && !isSearching && (
+                            <Text size="xs" c="dimmed" ta="center" py="sm">
+                                No results found for "{searchQuery}"
+                            </Text>
+                        )}
+                    </Box>
+                )}
 
                 {/* Graph container */}
                 <Box className="flex-1 relative">
