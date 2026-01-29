@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
     Box,
     Text,
@@ -18,17 +18,13 @@ import {
     IconPencil,
     IconListTree,
     IconSend,
-    IconRobot,
+    IconBolt,
     IconUser,
 } from "@tabler/icons-react";
 import { useAtlasStore } from "@/store/atlasStore";
 import type { AgentAction, AgentMessage } from "@/types/atlas";
 
-interface AgentPaneProps {
-    onAction: (action: AgentAction, prompt?: string) => Promise<void>;
-}
-
-export function AgentPane({ onAction }: AgentPaneProps) {
+export function AgentPane() {
     const {
         nodes,
         selectedNodeId,
@@ -36,19 +32,112 @@ export function AgentPane({ onAction }: AgentPaneProps) {
         agentProcessing,
         agentMessages,
         toggleAgent,
+        setAgentProcessing,
+        addAgentMessage,
     } = useAtlasStore();
 
     const [customPrompt, setCustomPrompt] = useState("");
+    const scrollRef = useRef<HTMLDivElement>(null);
 
     const selectedNode = selectedNodeId ? nodes[selectedNodeId] : null;
 
+    // Auto-scroll to bottom when messages change
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTo({
+                top: scrollRef.current.scrollHeight,
+                behavior: "smooth",
+            });
+        }
+    }, [agentMessages]);
+
+    const sendMessage = async (content: string) => {
+        if (!content.trim() || agentProcessing) return;
+
+        // Add user message
+        const userMessage: AgentMessage = {
+            id: `msg-${Date.now()}`,
+            role: "user",
+            content: content.trim(),
+            timestamp: new Date().toISOString(),
+        };
+        addAgentMessage(userMessage);
+        setAgentProcessing(true);
+
+        try {
+            // Build messages for API
+            const apiMessages = [
+                ...agentMessages.map((m) => ({
+                    role: m.role,
+                    content: m.content,
+                })),
+                { role: "user", content: content.trim() },
+            ];
+
+            const response = await fetch("/api/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    messages: apiMessages,
+                    context: selectedNode
+                        ? {
+                              nodeTitle: selectedNode.title,
+                              nodeContent: selectedNode.content,
+                          }
+                        : undefined,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error("Failed to get response");
+            }
+
+            const data = await response.json();
+
+            // Add assistant message
+            const assistantMessage: AgentMessage = {
+                id: `msg-${Date.now() + 1}`,
+                role: "assistant",
+                content: data.content,
+                timestamp: new Date().toISOString(),
+            };
+            addAgentMessage(assistantMessage);
+        } catch (error) {
+            console.error("Chat error:", error);
+            addAgentMessage({
+                id: `msg-${Date.now() + 1}`,
+                role: "assistant",
+                content: "Sorry, I encountered an error. Please try again.",
+                timestamp: new Date().toISOString(),
+            });
+        } finally {
+            setAgentProcessing(false);
+        }
+    };
+
     const handleAction = async (action: AgentAction) => {
-        await onAction(action);
+        let prompt = "";
+        switch (action) {
+            case "create_document":
+                prompt = "Create a new document. What topic would you like me to write about?";
+                break;
+            case "propose_revision":
+                prompt = selectedNode
+                    ? `Please review the current document "${selectedNode.title}" and suggest improvements. Focus on clarity, structure, and completeness.`
+                    : "Please select a document first to propose revisions.";
+                break;
+            case "create_subtopics":
+                prompt = selectedNode
+                    ? `Based on the document "${selectedNode.title}", suggest 3-5 subtopics that could be created as child documents to expand on this content.`
+                    : "Please select a document first to generate subtopics.";
+                break;
+        }
+        await sendMessage(prompt);
     };
 
     const handleCustomPrompt = async () => {
         if (!customPrompt.trim()) return;
-        await onAction("create_document", customPrompt);
+        await sendMessage(customPrompt);
         setCustomPrompt("");
     };
 
@@ -62,9 +151,9 @@ export function AgentPane({ onAction }: AgentPaneProps) {
             <Box className="p-3 border-b border-gray-200 dark:border-gray-700">
                 <Group justify="space-between">
                     <Group gap="xs">
-                        <IconRobot size={18} className="text-blue-500" />
+                        <IconBolt size={18} className="text-yellow-500" />
                         <Text fw={600} size="sm">
-                            Claude Agent
+                            Zeus Console
                         </Text>
                     </Group>
                     <ActionIcon
@@ -137,7 +226,7 @@ export function AgentPane({ onAction }: AgentPaneProps) {
             )}
 
             {/* Messages */}
-            <ScrollArea className="flex-1 p-3">
+            <ScrollArea className="flex-1 p-3" viewportRef={scrollRef}>
                 {agentMessages.length > 0 ? (
                     <Box className="space-y-3">
                         {agentMessages.map((msg) => (
@@ -146,22 +235,22 @@ export function AgentPane({ onAction }: AgentPaneProps) {
                         {agentProcessing && (
                             <Box className="flex items-center gap-2 text-gray-500">
                                 <Loader size="xs" />
-                                <Text size="xs">Claude is thinking...</Text>
+                                <Text size="xs">Zeus is thinking...</Text>
                             </Box>
                         )}
                     </Box>
                 ) : (
                     <Text size="sm" c="dimmed" ta="center" mt="xl">
-                        Use the actions above or type a custom prompt below.
+                        Ask Zeus anything or use the quick actions above.
                     </Text>
                 )}
             </ScrollArea>
 
             {/* Custom Prompt Input */}
             <Box className="p-3 border-t border-gray-200 dark:border-gray-700">
-                <Group gap="xs">
+                <Group gap="xs" align="flex-end">
                     <Textarea
-                        placeholder="Custom prompt..."
+                        placeholder="Ask Zeus..."
                         size="xs"
                         value={customPrompt}
                         onChange={(e) => setCustomPrompt(e.currentTarget.value)}
@@ -179,7 +268,7 @@ export function AgentPane({ onAction }: AgentPaneProps) {
                     />
                     <ActionIcon
                         variant="filled"
-                        color="blue"
+                        color="yellow"
                         onClick={handleCustomPrompt}
                         disabled={!customPrompt.trim() || agentProcessing}
                     >
@@ -195,9 +284,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
     const isUser = message.role === "user";
 
     return (
-        <Box
-            className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-        >
+        <Box className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
             <Paper
                 p="xs"
                 className={`max-w-[85%] ${
@@ -211,10 +298,10 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                     {isUser ? (
                         <IconUser size={12} />
                     ) : (
-                        <IconRobot size={12} />
+                        <IconBolt size={12} className="text-yellow-500" />
                     )}
                     <Text size="xs" fw={500}>
-                        {isUser ? "You" : "Claude"}
+                        {isUser ? "You" : "Zeus"}
                     </Text>
                 </Group>
                 <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>

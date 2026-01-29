@@ -7,13 +7,13 @@ import { useAtlasStore } from "@/store/atlasStore";
 import { TreePane } from "./TreePane";
 import { DocumentPane } from "./DocumentPane";
 import { AgentPane } from "./AgentPane";
+import { AlertsPane } from "./AlertsPane";
 import {
     fetchAtlasNodes,
     createAtlasNode,
     updateAtlasNode,
-    callClaudeAgent,
 } from "@/lib/zeusApi";
-import type { AgentAction, AtlasNode } from "@/types/atlas";
+import type { AtlasNode } from "@/types/atlas";
 
 const ZEUS_API_KEY = process.env.NEXT_PUBLIC_ZEUS_API_KEY || "";
 
@@ -26,8 +26,6 @@ export function AtlasWorkspace() {
         nodes,
         agentOpen,
         toggleAgent,
-        setAgentProcessing,
-        addAgentMessage,
         setEditMode,
     } = useAtlasStore();
 
@@ -46,44 +44,19 @@ export function AtlasWorkspace() {
                         title: "Welcome to Atlas",
                         content: `# Welcome to Atlas
 
-Atlas is a **3-pane markdown-first workspace** with Claude integration.
+Atlas is a document workspace powered by **Zeus Memory** with integrated AI assistance.
 
 ## Features
 
-- **Tree Navigation** - Organize documents hierarchically
+- **Document Tree** - Organize and navigate documents hierarchically
 - **Markdown Editor** - Write with live preview
-- **Claude Agent** - AI-powered document generation
+- **Zeus Console** - AI-powered document generation and editing
 
 ## Getting Started
 
-1. Create a new document using the + button
-2. Select a document to view/edit
-3. Use the Claude Agent for AI assistance
-
----
-
-*Built with Next.js, Mantine, and Zeus Memory*`,
-                        parentId: null,
-                        children: ["demo-2", "demo-3"],
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
-                    },
-                    "demo-2": {
-                        id: "demo-2",
-                        title: "Quick Start Guide",
-                        content: `# Quick Start Guide
-
-## Creating Documents
-
-Click the **+** button in the tree pane to create a new document.
-
-## Editing
-
-1. Select a document
-2. Click the edit icon or press \`Cmd+Shift+E\`
-3. Write markdown in the left pane
-4. See live preview in the right pane
-5. Click Save when done
+1. Create a new document using the **+** button
+2. Select a document to view or edit
+3. Use **Zeus Console** (right panel) for AI assistance
 
 ## Keyboard Shortcuts
 
@@ -91,8 +64,28 @@ Click the **+** button in the tree pane to create a new document.
 |----------|--------|
 | Cmd+K | Focus search |
 | Cmd+Shift+E | Toggle edit mode |
-| Cmd+\\ | Toggle agent pane |
-| Cmd+S | Save document |`,
+| Cmd+\\ | Toggle Zeus Console |`,
+                        parentId: null,
+                        children: ["demo-2", "demo-3"],
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                    },
+                    "demo-2": {
+                        id: "demo-2",
+                        title: "Using Zeus Console",
+                        content: `# Using Zeus Console
+
+Zeus Console is your AI assistant for document creation and editing.
+
+## Quick Actions
+
+- **Create Document** - Generate a new document on any topic
+- **Propose Revision** - Get AI suggestions to improve the current document
+- **Create Subtopics** - Generate related child documents
+
+## Custom Prompts
+
+Type any question or request in the input field and press Enter. Zeus has context of your current document and can help with research, writing, and editing.`,
                         parentId: "demo-1",
                         children: [],
                         createdAt: new Date().toISOString(),
@@ -100,25 +93,19 @@ Click the **+** button in the tree pane to create a new document.
                     },
                     "demo-3": {
                         id: "demo-3",
-                        title: "Using the Claude Agent",
-                        content: `# Using the Claude Agent
+                        title: "CCE Projects",
+                        content: `# CCE Projects
 
-The right pane contains the Claude Agent for AI-powered assistance.
+Your Claude Code Enhanced projects are stored in Nextcloud and synced with Zeus Memory.
 
-## Available Actions
+## Project Files
 
-### Create Document
-Generate a new document based on a topic or prompt.
+Access your CCE project files at:
+[ALDC Nextcloud - CCE Projects](https://cloud.aldc.io/apps/files/files/2689785?dir=/ALDC%20Management/CCE_projects)
 
-### Propose Revision
-Get AI suggestions to improve the current document.
+## Integration
 
-### Create Subtopics
-Generate child documents that expand on the current topic.
-
-## Custom Prompts
-
-Type any custom prompt in the input field and press Enter.`,
+Atlas connects to Zeus Memory to provide persistent storage and AI-assisted document management across all your CCE work.`,
                         parentId: "demo-1",
                         children: [],
                         createdAt: new Date().toISOString(),
@@ -272,56 +259,19 @@ Type any custom prompt in the input field and press Enter.`,
         [selectedNodeId, updateNode]
     );
 
-    // Agent action
-    const handleAgentAction = useCallback(
-        async (action: AgentAction, customPrompt?: string) => {
-            const selectedNode = selectedNodeId ? nodes[selectedNodeId] : null;
-
-            setAgentProcessing(true);
-
-            // Add user message
-            const userMessage = customPrompt || getActionLabel(action);
-            addAgentMessage({
-                id: `msg-${Date.now()}`,
-                role: "user",
-                content: userMessage,
-                timestamp: new Date().toISOString(),
-            });
-
-            try {
-                const response = await callClaudeAgent(ZEUS_API_KEY, action, {
-                    nodeTitle: selectedNode?.title,
-                    nodeContent: selectedNode?.content,
-                });
-
-                addAgentMessage({
-                    id: `msg-${Date.now() + 1}`,
-                    role: "assistant",
-                    content: response,
-                    timestamp: new Date().toISOString(),
-                });
-            } catch (error) {
-                console.error("Agent action failed:", error);
-                addAgentMessage({
-                    id: `msg-${Date.now() + 1}`,
-                    role: "assistant",
-                    content:
-                        "Sorry, I encountered an error. Please try again.",
-                    timestamp: new Date().toISOString(),
-                });
-            } finally {
-                setAgentProcessing(false);
-            }
-        },
-        [selectedNodeId, nodes, setAgentProcessing, addAgentMessage]
-    );
-
     return (
         <>
             <Box className="h-screen flex">
-                {/* Tree Pane - Left */}
-                <Box className="w-64 flex-shrink-0">
-                    <TreePane onCreateNode={() => setCreateModalOpen(true)} />
+                {/* Left Sidebar - Tree + Alerts */}
+                <Box className="w-64 flex-shrink-0 flex flex-col">
+                    {/* Tree Pane - Top */}
+                    <Box className="flex-1 min-h-0">
+                        <TreePane onCreateNode={() => setCreateModalOpen(true)} />
+                    </Box>
+                    {/* Alerts Pane - Bottom */}
+                    <Box className="h-48 flex-shrink-0">
+                        <AlertsPane />
+                    </Box>
                 </Box>
 
                 {/* Document Pane - Center */}
@@ -329,10 +279,10 @@ Type any custom prompt in the input field and press Enter.`,
                     <DocumentPane onSave={handleSave} />
                 </Box>
 
-                {/* Agent Pane - Right */}
+                {/* Zeus Console - Right */}
                 {agentOpen && (
                     <Box className="w-80 flex-shrink-0">
-                        <AgentPane onAction={handleAgentAction} />
+                        <AgentPane />
                     </Box>
                 )}
             </Box>
@@ -379,17 +329,4 @@ Type any custom prompt in the input field and press Enter.`,
             </Modal>
         </>
     );
-}
-
-function getActionLabel(action: AgentAction): string {
-    switch (action) {
-        case "create_document":
-            return "Create a new document";
-        case "propose_revision":
-            return "Propose improvements to this document";
-        case "create_subtopics":
-            return "Generate subtopics for this document";
-        default:
-            return action;
-    }
 }

@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@mantine/core": "^8.3.13",
     "@mantine/hooks": "^8.3.13",
     "@mantine/notifications": "^8.3.13",
