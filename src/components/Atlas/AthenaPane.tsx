@@ -34,12 +34,24 @@ export function AthenaPane({ graphUrl, graphName }: AthenaPaneProps) {
     // Listen for postMessage from iframe
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
-            // Only accept messages from athena
-            if (!event.origin.includes('athena.aldc.io')) return;
+            // Debug logging
+            console.log('[AthenaPane] Received message:', event.origin, event.data);
+
+            // Accept messages from athena domains
+            const isAthenaOrigin = event.origin.includes('athena.aldc.io') ||
+                                   event.origin.includes('athena.happydesert') ||
+                                   event.origin.includes('azurecontainerapps.io');
+
+            if (!isAthenaOrigin) {
+                console.log('[AthenaPane] Ignoring message from:', event.origin);
+                return;
+            }
 
             if (event.data?.type === 'nodeSelected') {
+                console.log('[AthenaPane] Node selected:', event.data.node);
                 setSelectedNode(event.data.node);
             } else if (event.data?.type === 'nodeDeselected') {
+                console.log('[AthenaPane] Node deselected');
                 setSelectedNode(null);
             }
         };
